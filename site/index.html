@@ -258,27 +258,7 @@
             color: #c0c0e0;
         }
 
-        .sound-item .play-btn {
-            width: 22px;
-            height: 22px;
-            background: #2a2a60;
-            border: none;
-            border-radius: 50%;
-            color: #a0a0ff;
-            cursor: pointer;
-            font-size: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            transition: background 0.15s;
-        }
-
-        .sound-item .play-btn:hover {
-            background: #4040a0;
-        }
-
-        .sound-item .del-sound {
+.sound-item .del-sound {
             width: 18px;
             height: 18px;
             background: none;
@@ -355,6 +335,26 @@
             color: #c0c0e0;
         }
 
+        .global-item-header .global-play-btn {
+            width: 22px;
+            height: 22px;
+            background: #2a2a60;
+            border: none;
+            border-radius: 50%;
+            color: #a0a0ff;
+            cursor: pointer;
+            font-size: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+
+        .global-item-header .global-play-btn:hover {
+            background: #4040a0;
+        }
+
         .global-item-header .stop-btn {
             width: 18px;
             height: 18px;
@@ -373,6 +373,10 @@
 
         .global-item-header .stop-btn:hover {
             color: #ff6060;
+        }
+
+        .global-prog-row {
+            margin-top: 4px;
         }
 
         .global-vol-row {
@@ -750,15 +754,16 @@
         }
 
         .sound-options {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            max-height: 140px;
+            max-height: 160px;
+            overflow-x: hidden;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .sound-opt {
+            display: block;
             padding: 5px 8px;
+            margin-bottom: 3px;
             background: #1a1a3a;
             border-radius: 4px;
             font-size: 12px;
@@ -768,6 +773,10 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .sound-opt:last-child {
+            margin-bottom: 0;
         }
 
         .sound-opt:hover {
@@ -1206,10 +1215,15 @@
                 padding: 8px;
             }
 
-            .sound-item .play-btn,
             .sound-item .global-btn {
                 width: 30px;
                 height: 30px;
+            }
+
+            /* On mobile the props panel itself scrolls — let sound list expand fully */
+            .sound-options {
+                max-height: none;
+                overflow-y: visible;
             }
 
             .img-item {
@@ -1884,23 +1898,35 @@
                 const item = document.createElement('div');
                 item.className = 'global-item';
                 const volPct = Math.round(g.volume * 100);
+                const playing = !s.audio.paused;
                 item.innerHTML = `
             <div class="global-item-header">
-                <span class="gname" title="${esc(s.name)}">${esc(shortName(s.name, 22))}</span>
+                <button class="global-play-btn" id="global-play-${soundId}">${playing ? '■' : '▶'}</button>
+                <span class="gname" title="${esc(s.name)}">${esc(shortName(s.name, 20))}</span>
                 <button class="stop-btn" title="Убрать из глобальных">✕</button>
             </div>
             <div class="global-vol-row">
                 <input type="range" class="prop-range" min="0" max="100" value="${volPct}" style="flex:1">
                 <span>${volPct}%</span>
             </div>
+            <div class="global-prog-row" id="global-prog-row-${soundId}" style="${s.audio.duration ? '' : 'display:none'}">
+                <input type="range" class="prop-range" id="global-prog-${soundId}" min="0" max="100" value="0" style="width:100%">
+            </div>
         `;
+                item.querySelector('.global-play-btn').onclick = () => toggleGlobalPlay(soundId);
                 item.querySelector('.stop-btn').onclick = () => toggleGlobal(soundId);
-                const range = item.querySelector('input[type=range]');
+                const range = item.querySelector('.global-vol-row input[type=range]');
                 const label = item.querySelector('.global-vol-row span');
                 range.oninput = () => {
                     label.textContent = range.value + '%';
                     setGlobalVolume(soundId, range.value / 100);
                 };
+                const progSlider = item.querySelector(`#global-prog-${soundId}`);
+                progSlider.addEventListener('pointerdown', () => globalSeeking.add(soundId));
+                progSlider.addEventListener('pointerup', () => {
+                    globalSeeking.delete(soundId);
+                    if (s.audio.duration) s.audio.currentTime = (progSlider.value / 100) * s.audio.duration;
+                });
                 list.appendChild(item);
             });
         }
@@ -2351,7 +2377,7 @@
                     audio.currentTime = 0;
                     audio.volume = 1;
                 }).catch(() => { });
-                sounds.push({ name: file.name, url, audio, blob: file, id: ++soundIdCounter, saved: false });
+                sounds.unshift({ name: file.name, url, audio, blob: file, id: ++soundIdCounter, saved: false });
             });
             input.value = '';
             renderSoundList();
@@ -2378,7 +2404,7 @@
             const id = ++soundIdCounter;
             const wrapper = new YouTubeAudioWrapper(videoId, null);
             wrapper.loop = true;
-            sounds.push({ id, name: title, type: 'youtube', videoId, audio: wrapper, saved: false });
+            sounds.unshift({ id, name: title, type: 'youtube', videoId, audio: wrapper, saved: false });
             renderSoundList();
             renderPropsPanel();
             scheduleSave();
@@ -2444,11 +2470,9 @@
                 item.innerHTML = `
             <span class="sname" title="${esc(s.name)}">${esc(s.name)}</span>
             <button class="global-btn${on ? ' on' : ''}" title="${on ? 'Убрать из глобальных' : 'Запустить глобально'}">🌐</button>
-            <button class="play-btn" title="Прослушать">▶</button>
             <button class="del-sound" title="Удалить">✕</button>
         `;
                 item.querySelector('.global-btn').onclick = (e) => { e.stopPropagation(); toggleGlobal(s.id); };
-                item.querySelector('.play-btn').onclick = (e) => previewSound(e, s.id);
                 item.querySelector('.del-sound').onclick = (e) => { e.stopPropagation(); removeSound(s.id); };
                 list.appendChild(item);
             });
@@ -2619,6 +2643,36 @@
         }
 
         const zoneSeeking = new Set();
+        const globalSeeking = new Set();
+
+        function toggleGlobalPlay(soundId) {
+            const s = sounds.find(s => s.id === soundId);
+            if (!s) return;
+            if (s.audio.paused) { s.audio.play(); } else { s.audio.pause(); }
+        }
+
+        function updateGlobalListSliders() {
+            globalSounds.forEach((g, soundId) => {
+                const s = sounds.find(s => s.id === soundId);
+                if (!s) return;
+                const btn = document.getElementById(`global-play-${soundId}`);
+                const prog = document.getElementById(`global-prog-${soundId}`);
+                const row = document.getElementById(`global-prog-row-${soundId}`);
+                if (!btn) return;
+                const playing = !s.audio.paused;
+                btn.textContent = playing ? '■' : '▶';
+                if (prog && row) {
+                    if (s.audio.duration && isFinite(s.audio.duration)) {
+                        row.style.display = '';
+                        if (!globalSeeking.has(soundId)) {
+                            prog.value = (s.audio.currentTime / s.audio.duration) * 100;
+                        }
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+        }
 
         function toggleZonePlay(zoneId) {
             const z = zones.find(z => z.id === zoneId);
@@ -2981,6 +3035,7 @@
             updateFades(animTime);
             updateProximityVolumes();
             updateZoneListSliders();
+            updateGlobalListSliders();
             updateTimeDisplay();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawGrid();
@@ -3852,6 +3907,7 @@
                 youtubeSounds: sounds
                     .filter(s => s.type === 'youtube')
                     .map(s => ({ id: s.id, name: s.name, videoId: s.videoId })),
+                soundOrder: sounds.map(s => s.id),
             };
             await idbPut('state', stateData);
 
@@ -3912,6 +3968,16 @@
             }
 
             if (state) soundIdCounter = Math.max(soundIdCounter, ...sounds.map(s => s.id), 0);
+
+            // Restore original sound order
+            if (state && state.soundOrder && state.soundOrder.length) {
+                const orderMap = new Map(state.soundOrder.map((id, i) => [id, i]));
+                sounds.sort((a, b) => {
+                    const ai = orderMap.has(a.id) ? orderMap.get(a.id) : Infinity;
+                    const bi = orderMap.has(b.id) ? orderMap.get(b.id) : Infinity;
+                    return ai - bi;
+                });
+            }
 
             // Load image blobs → build imageElementCache
             const imgRecords = await idbGetAll('imgBlobs');
